@@ -7,78 +7,229 @@ library(ggnewscale)
 library(MetBrewer)
 library(tidyr)
 library(ggthemes)
+library(cowplot)
 
 
-{#LOCRC_Country
+  countries_LO <- unique(rt@clinical.data$Country)[1:7]
   
-  # Extract all unique Hugo_Symbol
-  countries = countries[1:7]
-  gene_symbols <- c()
-  generate_country_sample(countries = countries , cl = cl, rt = rt, XOCRC = 'LOCRC')
+  Gene_list_country_LO <- left_join(clin.LOCRC@data[,.(Hugo_Symbol,Tumor_Sample_Barcode)],
+                                    clin.LOCRC@clinical.data[,.(Tumor_Sample_Barcode,Country)],
+                                    by = 'Tumor_Sample_Barcode') %>% 
+    group_by(Country) %>% 
+    reframe(
+      Gene_list = list(Hugo_Symbol)
+    )
+  
+  gene_lists <- lapply(Gene_list_country_LO$Gene_list, unlist)
+  common_genes <- Reduce(intersect, gene_lists)
+  
+  mutation_table <- data.table(
+    gene = common_genes,
+    Canada = NA_real_,
+    China = NA_real_,
+    US = NA_real_,
+    Netherlands = NA_real_,
+    Nigeria = NA_real_,
+    France = NA_real_,
+    Spain = NA_real_
+  )
   
   
-  for (country in countries) {
-    gene_symbols <- c(gene_symbols, get(paste(country, "LOCRC", sep = "."))$Hugo_Symbol)
+  for (i in common_genes) {
+    generate_country_frequency(countries = countries_LO, 
+                               maf = clin.LOCRC, jiyin = i)
   }
-  uniqueGenes <- genes[genes %in% unique(gene_symbols)]
   
-  generate_country_frequency(countries,'LOCRC',uniqueGenes = uniqueGenes)
+ 
+  mutation_table_LO <- mutation_table %>% 
+    mutate(Korea = 0) %>% 
+    mutate(Age_class = 'LOCRC')
   
-  mutation_table <- data.frame(gene = uniqueGenes,
-                               Canada = Canada.LOCRC_commongene$mutfreq[match(uniqueGenes, Canada.LOCRC_commongene$Hugo_Symbol)],
-                               Netherlands = Netherlands.LOCRC_commongene$mutfreq[match(uniqueGenes, Netherlands.LOCRC_commongene$Hugo_Symbol)],
-                               Nigeria = Nigeria.LOCRC_commongene$mutfreq[match(uniqueGenes, Nigeria.LOCRC_commongene$Hugo_Symbol)],
-                               Spain = Spain.LOCRC_commongene$mutfreq[match(uniqueGenes, Spain.LOCRC_commongene$Hugo_Symbol)],
-                               US = US.LOCRC_commongene$mutfreq[match(uniqueGenes, US.LOCRC_commongene$Hugo_Symbol)],
-                               China = China.LOCRC_commongene$mutfreq[match(uniqueGenes, China.LOCRC_commongene$Hugo_Symbol)],
-                               France = France.LOCRC_commongene$mutfreq[match(uniqueGenes, France.LOCRC_commongene$Hugo_Symbol)])
+  common_EO_LO_gene <- intersect(mutation_table_EO$gene,
+                                 mutation_table_LO$gene)
+
+  common_EO_LO_df <- rbind(mutation_table_EO[gene%in%common_EO_LO_gene,],
+                           mutation_table_LO[gene%in%common_EO_LO_gene,]) 
+ 
+  common_EO_LO_df$Max_Frequency <- apply(common_EO_LO_df[, 2:9], 1, max)
   
-  # mutation_table[is.na(mutation_table)] = 0
-  mutation_table <- na.omit(mutation_table)
+  common_EO_LO_df_higherfreq <- common_EO_LO_df %>% 
+    group_by(gene) %>% 
+    filter(all(Max_Frequency > 0.14)) %>% 
+    ungroup() %>% 
+    select(-Max_Frequency) %>% 
+    pivot_longer(cols = Canada:Korea,  
+                           names_to = "Country", 
+                           values_to = "Frequency")
+  
 
   
-  plotdata <- data.frame(t(mutation_table))
-  colnames(plotdata) <- plotdata[1,]
-  plotdata = plotdata[-1,]
-  plotdata$country = rownames(plotdata)
+  palette <- c('#1f78b4','#fc8d62')
   
-  palette <- c('#b2182b','#d6604d','#f4a582','#fddbc7','#d1e5f0','#92c5de','#4393c3','#2166ac')
-
-  palette <- c('Canada' = '#b2182b',
-               'China' = '#d6604d',
-               'France' = '#f4a582',
-               
-               #'Korea' = '#fddbc7',
-               'Netherlands' = '#d1e5f0',
-               'Nigeria' = '#92c5de',
-               'Spain' = '#4393c3',
-               'US'='#2166ac') 
-  
-  
-  mergedata <- reshape2::melt(plotdata[,], id = 'country') 
-  mergedata$value = round(as.numeric(mergedata$value), 3)
-} 
-  
-
-    ggplot(mergedata, aes(x = country, y = value, fill = country)) + 
-    geom_bar(stat = "identity", position = "dodge") + 
-    facet_wrap(~ variable, scales = "free", ncol = 3) +
+ 
+  plot_common_EO_LO_df_higherfreq <- common_EO_LO_df_higherfreq %>% 
+    ggplot(aes(Frequency, Country, fill = Age_class)) +
+    geom_col(position = position_dodge(1), width = 0.6) + 
+    labs(y = NULL) +
+    facet_wrap('gene', scales = "free", nrow  = 1) + 
     theme_few() +
-    scale_fill_manual(values = palette) + 
+   
+    scale_fill_manual(values = palette) +
+    theme(
+      axis.text.y = element_text(color = "black", size = 8), 
+      axis.text.x   = element_text(color = "black", size = 8, hjust=1,angle = 45),
+      axis.title = element_text(color = "black", size = 14, face = "bold"),
+      axis.ticks.y = element_blank(), 
+      legend.position = "right", 
+      plot.background = element_blank(), 
+      panel.background = element_blank(), 
+      strip.background = element_blank(), 
+      strip.placement = "outside",
+      strip.text.y.left = element_text(angle = 0) 
+    )+
+    coord_flip() 
+  
+  plot_common_EO_LO_df_higherfreq
+  
+  common_EO_LO_df_lowerfreq <- common_EO_LO_df %>% 
+    
+    filter(!(gene%in% common_EO_LO_df_higherfreq$gene)) %>% 
+    select(-Max_Frequency) %>% 
+    pivot_longer(cols = Canada:Korea,  
+                 names_to = "Country", 
+                 values_to = "Frequency")
+  
+  plot_common_EO_LO_df_lowerfreq <- common_EO_LO_df_lowerfreq %>% 
+    ggplot(aes(Frequency, Country, fill = Age_class)) +
+    geom_col(position = position_dodge(1), width = 0.6) + 
+    labs(y = "Country") +
+    facet_wrap('gene', scales = "free", nrow  = 1) + 
+    theme_few() + 
+    scale_fill_manual(values = palette) +
+    theme(
+      axis.text.y = element_text(color = "black", size = 8), 
+      # axis.text.x = element_text(color = "black", size = 8),
+      axis.text.x   = element_text(color = "black", size = 8, hjust=1,angle = 45),
+      axis.title = element_text(color = "black", size = 14, face = "bold"),
+      axis.ticks.y = element_blank(), 
+      legend.position = "right",
+      plot.background = element_blank(), 
+      panel.background = element_blank(), 
+      strip.background = element_blank(), 
+      strip.placement = "outside", 
+      strip.text.y.left = element_text(angle = 0) 
+    )+
+    coord_flip() 
+  
+  
+  plot_common_EO_LO_df_lowerfreq
+
+  
+    
+    pdf(paste(dir,"/4_EOCRC_LOCRC_common_genes_mainplot.pdf", sep = ""), width = 18, height = 5)
+    plot_grid( plot_common_EO_LO_df_higherfreq,
+               plot_common_EO_LO_df_lowerfreq, 
+               
+               nrow = 2,rel_heights = c(2, 2.25),
+                        rel_widths = c(1,1))
+    dev.off()
+  
+    
+    
+    
+    #supplementary plot
+    
+    palette <- c('Canada' = '#b2182b',
+                 'China' = '#d6604d',
+                 'France' = '#f4a582',
+                 
+                 'Korea' = '#fddbc7',
+                 'Netherlands' = '#d1e5f0',
+                 'Nigeria' = '#92c5de',
+                 'Spain' = '#4393c3',
+                 'US'='#2166ac') 
+    
+    
+   
+    #supplementary plot_LO
+    mutation_table_LO <- mutation_table_LO %>% 
+      filter(!(gene %in% common_EO_LO_df$gene)) %>% 
+      select(-Age_class)
+   
+  
+    plotdata_LO <- data.frame(t(mutation_table_LO))
+    colnames(plotdata_LO) <- plotdata_LO[1,]
+    plotdata_LO = plotdata_LO[-1,]
+    plotdata_LO$Country = rownames(plotdata_LO)
+    
+    mergedata <- reshape2::melt(plotdata_LO[,], id = 'Country') 
+    mergedata$value = round(as.numeric(mergedata$value), 3)
+    
+
+  Common_country_LO = ggplot(mergedata, aes(x = Country, y = value, fill = Country)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    facet_wrap(~ variable, scales = "free", nrow =3) +
+    theme_few() +
+      scale_fill_manual(values = palette) +
+      labs(subtitle = "LOCRC")+
    theme(
       plot.title    = element_text(color = "black", size   = 16, hjust = 0.5),
       plot.subtitle = element_text(color = "black", size   = 16,hjust = 0.5),
       plot.caption  = element_text(color = "black", size   = 16,face = "italic", hjust = 1),
       axis.text.x   = element_text(color = "black", size = 16, hjust=1,angle = 45),
       axis.text.y   = element_text(color = "black", size = 16, angle = 0),
-      axis.title.x  = element_text(color = "black", size = 16, angle = 0),
-      axis.title.y  = element_text(color = "black", size = 16, angle = 90),
+      axis.title.x  = element_text(color = "black", size = 20, angle = 0),
+      axis.title.y  = element_text(color = "black", size = 20, angle = 90),
       legend.title  = element_text(color = "black", size  = 16),
       legend.text   = element_text(color = "black", size   = 16),
       strip.text = element_text(size = 14),
-      axis.line.y = element_line(color = "black", linetype = "solid"), 
-      axis.line.x = element_line (color = "black",linetype = "solid"), 
+      axis.line.y = element_line(color = "black", linetype = "solid"),
+      axis.line.x = element_line (color = "black",linetype = "solid"),
       panel.border = element_rect(linetype = "solid", linewidth = 1.2,fill = NA) )
- 
 
-  ggsave(paste(dir,"/4_LOCRC_common_genes.pdf",sep = ""), width = 10, height = 8, dpi = 300)
+     Common_country_LO
+     ggsave(paste(dir,"/4_LOCRC_common_genes_supplementary.pdf",sep = ""), width = 24, height = 10, dpi = 300)
+
+  
+  #supplementary plot_EO
+  
+  mutation_table_EO <- mutation_table_EO %>% 
+    filter(!(gene %in% common_EO_LO_df$gene)) %>% 
+    select(-Age_class)
+  
+  
+  plotdata_EO <- data.frame(t(mutation_table_EO))
+  
+  colnames(plotdata_EO) <- plotdata_EO[1,]
+  plotdata_EO = plotdata_EO[-1,]
+  plotdata_EO$Country = rownames(plotdata_EO)
+  
+  mergedata <- reshape2::melt(plotdata_EO[,], id = 'Country') 
+  mergedata$value = round(as.numeric(mergedata$value), 3)
+
+  
+  Common_country_EO = ggplot(mergedata, aes(x = Country, y = value, fill = Country)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    facet_wrap(~ variable, scales = "free", nrow =1) +
+    theme_few() +
+    scale_fill_manual(values = palette) +
+    labs(subtitle = "EOCRC")+
+    theme(
+      plot.title    = element_text(color = "black", size   = 16, hjust = 0.5),
+      plot.subtitle = element_text(color = "black", size   = 16,hjust = 0.5),
+      plot.caption  = element_text(color = "black", size   = 16,face = "italic", hjust = 1),
+      axis.text.x   = element_text(color = "black", size = 16, hjust=1,angle = 45),
+      axis.text.y   = element_text(color = "black", size = 16, angle = 0),
+      axis.title.x  = element_text(color = "black", size = 20, angle = 0),
+      axis.title.y  = element_text(color = "black", size = 20, angle = 90),
+      legend.title  = element_text(color = "black", size  = 16),
+      legend.text   = element_text(color = "black", size   = 16),
+      strip.text = element_text(size = 14),
+      axis.line.y = element_line(color = "black", linetype = "solid"),
+      axis.line.x = element_line (color = "black",linetype = "solid"),
+      panel.border = element_rect(linetype = "solid", linewidth = 1.2,fill = NA) )
+  
+      Common_country_EO
+      ggsave(paste(dir,"/4_EOCRC_common_genes_supplementary.pdf",sep = ""), width = 11, height = 4, dpi = 300)
+  
+  

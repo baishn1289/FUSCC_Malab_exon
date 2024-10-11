@@ -1,0 +1,656 @@
+library(ggplot2)
+library(ggthemes)
+library(maftools)
+library(dplyr)
+library(stringr)
+library(data.table)
+library(tidyr)
+library(tidyverse)
+library(cowplot)
+
+
+
+barplot_tmb_status_hyper_EO <- clin.EOCRC_hyper@clinical.data %>% 
+  group_by(Country) %>% 
+  summarise(
+    hyper = n_distinct(Tumor_Sample_Barcode),
+  ) %>% 
+  ungroup() %>%
+ mutate(Age_class = 'EOCRC') 
+
+barplot_tmb_status_hyper_LO <- clin.LOCRC_hyper@clinical.data %>% 
+  group_by(Country) %>% 
+  summarise(
+    hyper = n_distinct(Tumor_Sample_Barcode),
+  ) %>% 
+  ungroup() %>% 
+  mutate(Age_class = 'LOCRC') 
+
+
+barplot_tmb_status_nonhyper_EO <- clin.EOCRC_nonhyper@clinical.data %>% 
+  group_by(Country) %>% 
+  summarise(
+    nonhyper = n_distinct(Tumor_Sample_Barcode),
+  ) %>% 
+  ungroup() %>% 
+  mutate(Age_class = 'EOCRC') 
+
+
+barplot_tmb_status_nonhyper_LO <- clin.LOCRC_nonhyper@clinical.data %>% 
+  group_by(Country) %>% 
+  summarise(
+    nonhyper = n_distinct(Tumor_Sample_Barcode),
+  ) %>% 
+  ungroup() %>% 
+  mutate(Age_class = 'LOCRC') 
+
+barplot_tmb_status_EO <- full_join(barplot_tmb_status_nonhyper_EO,
+                                   barplot_tmb_status_hyper_EO,
+                                   by =c("Country", "Age_class") )%>%
+  gather(key = "Type", value = "Value", -Country, -Age_class) %>%
+  group_by(Country, Age_class) %>%
+  mutate(Percentage = Value / sum(Value) * 100)
+
+barplot_tmb_status_LO <- full_join(barplot_tmb_status_nonhyper_LO,
+                                   barplot_tmb_status_hyper_LO,
+                                   by =c("Country", "Age_class") )%>%
+  gather(key = "Type", value = "Value", -Country, -Age_class) %>%
+  group_by(Country, Age_class) %>%
+  mutate(Percentage = Value / sum(Value) * 100)
+
+
+t.test(barplot_tmb_status_LO[barplot_tmb_status_LO$Type == 'hyper',]$Percentage,
+       barplot_tmb_status_EO[barplot_tmb_status_EO$Type == 'hyper'& barplot_tmb_status_EO$Country != "Korea",]$Percentage)
+
+t.test(barplot_tmb_status_LO[barplot_tmb_status_LO$Type == 'nonhyper',]$Percentage,
+       barplot_tmb_status_EO[barplot_tmb_status_EO$Type == 'nonhyper'& barplot_tmb_status_EO$Country != "Korea",]$Percentage)
+
+
+p_EO <- ggplot(barplot_tmb_status_EO, aes(x=Country, y=Percentage, fill=Type)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~Age_class, nrow=1) +
+  scale_fill_manual(values=c("hyper"="#d8bfd8", "nonhyper"="#6495ed")) +
+  labs(y="TMB_Status Proportion(%)", x="Country", fill="Age_class") +
+  theme_minimal() +
+  theme(
+    strip.background = element_rect(fill="white", colour="black", linewidth=1),
+    strip.text = element_text(size=12, face="bold"),
+    axis.text.x = element_text(angle=45, hjust=1),
+    legend.position = "none",
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+p_LO <- ggplot(barplot_tmb_status_LO, aes(x=Country, y=Percentage, fill=Type)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~Age_class, nrow=1) +
+  scale_fill_manual(values=c("hyper"="#d8bfd8", "nonhyper"="#6495ed")) +
+  labs(y=NULL, x="Country", fill="Age_class") +
+  theme_minimal() +
+  theme(
+    strip.background = element_rect(fill="white", colour="black", linewidth=1),
+    strip.text = element_text(size=12, face="bold"),
+    axis.text.x = element_text(angle=45, hjust=1),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+  )
+
+
+
+print(p_EO)
+print(p_LO)
+
+library(gridExtra)
+pdf(paste(dir,"/8_TMB_Status_distribution.pdf", sep = ""), width = 9, height = 6)
+grid.arrange(p_EO, p_LO, nrow = 1,widths = c(1, 1.25))
+dev.off()
+
+
+{
+ 
+
+  barplot_tmb_status_hyper_EO_US <- clin.EOCRC_hyper@clinical.data %>%
+    
+    group_by(Panel) %>%
+    summarise(
+      hyper = n_distinct(Tumor_Sample_Barcode),
+    ) %>%
+    ungroup() %>%
+    mutate(Age_class = 'EOCRC')
+
+  barplot_tmb_status_hyper_LO_US <- clin.LOCRC_hyper@clinical.data %>%
+   
+    group_by(Panel) %>%
+    summarise(
+      hyper = n_distinct(Tumor_Sample_Barcode),
+    ) %>%
+    ungroup() %>%
+    mutate(Age_class = 'LOCRC')
+
+
+
+  barplot_tmb_status_nonhyper_EO_US <- clin.EOCRC_nonhyper@clinical.data %>%
+
+    group_by(Panel) %>%
+    summarise(
+      nonhyper = n_distinct(Tumor_Sample_Barcode),
+    ) %>%
+    ungroup() %>%
+    mutate(Age_class = 'EOCRC')
+
+
+  barplot_tmb_status_nonhyper_LO_US <- clin.LOCRC_nonhyper@clinical.data %>%
+
+    group_by(Panel) %>%
+    summarise(
+      nonhyper = n_distinct(Tumor_Sample_Barcode),
+    ) %>%
+    ungroup() %>%
+    mutate(Age_class = 'LOCRC')
+
+  barplot_tmb_status_EO_US <- full_join(barplot_tmb_status_nonhyper_EO_US,
+                                        barplot_tmb_status_hyper_EO_US,
+                                        by =c("Panel", "Age_class") ) %>%
+    gather(key = "Type", value = "Value", -Panel, -Age_class) %>%
+
+    mutate(Value = replace_na(Value, 0)) %>%
+
+    group_by(Panel, Age_class) %>%
+    mutate(Percentage = Value / sum(Value) * 100)
+
+  barplot_tmb_status_LO_US <- full_join(barplot_tmb_status_nonhyper_LO_US,
+                                        barplot_tmb_status_hyper_LO_US,
+                                        by =c("Panel", "Age_class") ) %>%
+    gather(key = "Type", value = "Value", -Panel, -Age_class) %>%
+
+    mutate(Value = replace_na(Value, 0)) %>%
+
+    group_by(Panel, Age_class) %>%
+    mutate(Percentage = Value / sum(Value) * 100)
+
+  sum(is.na(barplot_tmb_status_EO_US$Percentage))
+  sum(is.na(barplot_tmb_status_LO_US$Percentage))
+  summary(barplot_tmb_status_EO_US$Percentage)
+  summary(barplot_tmb_status_LO_US$Percentage)
+
+
+  p_EO_US <- ggplot(barplot_tmb_status_EO_US, aes(x=Panel, y=Percentage, fill=Type)) +
+    geom_bar(stat="identity") +
+    facet_wrap(~Age_class, nrow=1) +
+    scale_fill_manual(values=c("hyper"="#d8bfd8", "nonhyper"="#6495ed")) +
+    labs(y="TMB_Status Proportion(%)", x="Panel", fill="Age_class") +
+    theme_minimal() +
+    theme(
+      strip.background = element_rect(fill="white", colour="black", linewidth=1),
+      strip.text = element_text(size=12, face="bold"),
+      axis.text.x = element_text(angle=45, hjust=1),
+      legend.position = "none",
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank()
+    )
+
+  p_LO_US <- ggplot(barplot_tmb_status_LO_US, aes(x=Panel, y=Percentage, fill=Type)) +
+    geom_bar(stat="identity") +
+    facet_wrap(~Age_class, nrow=1) +
+    scale_fill_manual(values=c("hyper"="#d8bfd8", "nonhyper"="#6495ed")) +
+    labs(y=NULL, x="Panel", fill="Age_class") +
+    theme_minimal() +
+    theme(
+      strip.background = element_rect(fill="white", colour="black", linewidth=1),
+      strip.text = element_text(size=12, face="bold"),
+      axis.text.x = element_text(angle=45, hjust=1),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    )
+
+  print(p_EO_US)
+  print(p_LO_US)
+
+  library(gridExtra)
+  pdf(paste(dir,"/8_TMB_Status_distribution_allpanels.pdf", sep = ""), width = 30, height = 6)
+  grid.arrange(p_EO_US, p_LO_US, nrow = 1,widths = c(1, 1.25))
+  dev.off()
+
+  }
+
+
+uniquegenes <- function(m1, m2, m1Name = NULL, m2Name = NULL,
+                        minMut = 5){
+  
+  
+  m1.gs <- getGeneSummary(x = m1)
+  m2.gs <- getGeneSummary(x = m2)
+  
+  if (is.null(m1Name)) {
+    m1Name = "M1"
+  }
+  if (is.null(m2Name)) {
+    m2Name = "M2"
+  }
+  
+  m1.genes = as.character(m1.gs[AlteredSamples >= minMut, 
+                                Hugo_Symbol])
+  m2.genes = as.character(m2.gs[AlteredSamples >= minMut, 
+                                Hugo_Symbol])
+  uniquegenes =  intersect(m1.genes, m2.genes)
+  
+  return(uniquegenes)
+  
+}
+
+
+logstic_country_mafcompare <- function(m1, m2, Clinical.data, Gene_test,Guojia,TMB_status) {
+  
+  Alter_m1_Gene = m1@data[Hugo_Symbol == Gene_test,] %>% 
+    filter(!duplicated(Tumor_Sample_Barcode))
+  
+  Alter_m2_Gene = m2@data[Hugo_Symbol == Gene_test,] %>% 
+    filter(!duplicated(Tumor_Sample_Barcode))
+  
+  Gene_panels <- panel_hugo_symbol[Hugo_Symbol == Gene_test] %>%
+    merge(Clinical.data[, c('Tumor_Sample_Barcode', 'Age_class', 'Sex', 'Country', 'Race')], by = "Tumor_Sample_Barcode") %>%
+    filter(!duplicated(Tumor_Sample_Barcode)) %>%
+    group_by(Panel) %>%
+    summarise(
+      Age_class_count = n_distinct(Age_class)
+    ) %>%
+    ungroup() %>% 
+    filter(Age_class_count == 2) %>% 
+    pull(Panel)
+
+  if (length(Gene_panels) == 0) {
+    print(Gene_test)
+  
+    singlesex_panel_record_log <<- rbind(singlesex_panel_record_log, 
+                                         data.frame(Gene_test = Gene_test,
+                                                    Country = Guojia,
+                                                    TMB_status = TMB_status,
+                                                    stringsAsFactors = FALSE))
+    
+    return()
+  }
+  
+ 
+  mut_samples_m1 <- length(unique(Alter_m1_Gene$Tumor_Sample_Barcode))
+  
+  
+  panels_samples_m1 <- length(unique(m1@clinical.data[m1@clinical.data$Panel %in% Gene_panels, ]$Tumor_Sample_Barcode))
+  
+  
+  m1_freq <- mut_samples_m1 / panels_samples_m1
+  
+  # ------------
+  mut_samples_m2 <- length(unique(Alter_m2_Gene$Tumor_Sample_Barcode))
+  
+  
+  panels_samples_m2 <- length(unique(m2@clinical.data[m2@clinical.data$Panel %in% Gene_panels, ]$Tumor_Sample_Barcode))
+  
+  
+  m2_freq <- mut_samples_m2 / panels_samples_m2
+  
+
+  
+  
+  Gene_clinical_info = Clinical.data[, Gene_status := ifelse(Tumor_Sample_Barcode %in% c(Alter_m1_Gene$Tumor_Sample_Barcode,
+                                                                                         Alter_m2_Gene$Tumor_Sample_Barcode), 1, 0)] %>% 
+    filter(Panel %in% Gene_panels)
+ 
+  
+  if (length(unique(Gene_clinical_info$Race)) > 1) {
+    formula_base <- paste(formula_base, "+ Race")
+  }
+  if (length(unique(Gene_clinical_info$Panel)) > 1) {
+    formula_base <- paste(formula_base, "+ Panel")
+  }
+  if (length(unique(Gene_clinical_info$Country)) > 1) {
+    formula_base <- paste(formula_base, "+ Country")
+  }
+  if (length(unique(Gene_clinical_info$Sex)) > 1) {
+    formula_base <- paste(formula_base, "+ Sex")
+  }
+  
+  
+  fit <- glm(as.formula(formula_base), family = binomial(link = "logit"), data = Gene_clinical_info)
+
+  OR_age_class <- exp(coef(fit)["Age_classEOCRC"])
+
+  pval_age_class <- summary(fit)$coefficients["Age_classEOCRC", "Pr(>|z|)"]
+  
+ 
+  coef_age_class <- coef(fit)["Age_classEOCRC"]
+  se_age_class <- summary(fit)$coefficients["Age_classEOCRC", "Std. Error"]
+  ci_low <- exp(coef_age_class - 1.96 * se_age_class)
+  ci_up  <- exp(coef_age_class + 1.96 * se_age_class)
+  
+  df_Gene_test <- data.table::data.table(
+    Hugo_Symbol = Gene_test,
+    EOCRC_total_case= panels_samples_m1,
+    LOCRC_total_case= panels_samples_m2,
+    EOCRC_mutated_case = mut_samples_m1, 
+    LOCRC_mutated_case = mut_samples_m2, 
+    EOCRC_freq = m1_freq,
+    LOCRC_freq = m2_freq,
+    pval = pval_age_class, 
+    or = OR_age_class,
+    ci.up = ci_up,
+    ci.low = ci_low,
+    formula = formula_base,
+    TMB_Status = TMB_status,
+    Country = Guojia
+  )
+  
+  result_df <<- rbind(result_df, df_Gene_test)  
+}
+
+
+
+
+rt@clinical.data$Age_class <-  factor(rt@clinical.data$Age_class
+                                      ,levels = c('LOCRC','EOCRC'))
+
+
+
+generate_bubble_table <- function(guojia,Minmut){
+  
+  country_tsb<- rt@clinical.data[Country == guojia]$Tumor_Sample_Barcode
+  
+  
+ 
+  if (length(intersect(clin.EOCRC@clinical.data$Tumor_Sample_Barcode, country_tsb)) > 0 &
+      length(intersect(clin.LOCRC@clinical.data$Tumor_Sample_Barcode, country_tsb)) > 0){
+     
+      rt_country_EO <- subsetMaf(clin.EOCRC,tsb=country_tsb)
+      rt_country_LO <- subsetMaf(clin.LOCRC,tsb=country_tsb)
+      rt_clinicaldata_country <- rt@clinical.data[Country == guojia]
+    
+      bubble_genes <- uniquegenes(m1 = rt_country_EO, m2 = rt_country_LO, minMut = Minmut)
+      
+      if(length(bubble_genes) == 0 ){
+        return(NULL)
+      }
+     
+      for (i in bubble_genes) {
+        result <- tryCatch({
+          logstic_country_mafcompare(m1 = rt_country_EO, m2 = rt_country_LO,
+                                     Clinical.data = rt_clinicaldata_country, 
+                                     Gene_test =i,Guojia = guojia,TMB_status = 'Overall')
+          NULL  
+        }, warning = function(w) {
+          problematic_genes <<- 
+            rbind(problematic_genes,
+                  data.frame(problematic_gene = i,
+                            country =guojia,
+                            TMB_Staus = 'Overall'))
+          return(NULL) 
+        })
+      }
+      
+      country_comp <- result_df[-1,]
+     
+    
+    
+  
+  }else{
+    
+    country_comp <- data.frame(Hugo_Symbol=NA, 
+                               EOCRC_total_case= NA,
+                               LOCRC_total_case= NA,
+                               EOCRC_mutated_case = NA, 
+                               LOCRC_mutated_case = NA,
+                               EOCRC_freq =NA, LOCRC_freq =NA, pval =NA,
+                               or =NA, ci.up =NA, ci.low =NA,
+                               formula = NA, TMB_Status =NA, Country = NA)
+  }
+  
+  
+  if (length(intersect(clin.EOCRC_hyper@clinical.data$Tumor_Sample_Barcode, country_tsb)) > 0 &
+      length(intersect(clin.LOCRC_hyper@clinical.data$Tumor_Sample_Barcode, country_tsb)) > 0) {
+    
+    rt_country_EO_hyper <- subsetMaf(clin.EOCRC_hyper,tsb=country_tsb)
+    rt_country_LO_hyper <- subsetMaf(clin.LOCRC_hyper,tsb=country_tsb)
+    Clinical_data_hyper <- Clinical_data_hyper[Country == guojia]
+    
+    
+    
+    bubble_genes_hyper <- uniquegenes(m1 = rt_country_EO_hyper, m2 = rt_country_LO_hyper,
+                                      minMut = Minmut)
+    
+    if(length(bubble_genes_hyper) == 0 ){
+      return(NULL)
+    }
+   
+       
+    for (i in bubble_genes_hyper) {
+      result <- tryCatch({
+        logstic_country_mafcompare(m1 = rt_country_EO_hyper, m2 = rt_country_LO_hyper,
+                                   Clinical.data = Clinical_data_hyper, 
+                                   Gene_test =i,Guojia = guojia,TMB_status = 'hyper')
+        NULL  
+      }, warning = function(w) {
+        problematic_genes <<- 
+          rbind(problematic_genes,
+                data.frame(problematic_gene = i,
+                           country =guojia,
+                           TMB_Staus = 'hyper'))
+        return(NULL)  
+      })
+    }
+    
+   country_comp_hyper <- result_df[-1,]
+   
+  
+  }else{
+    
+    country_comp_hyper <- data.frame(Hugo_Symbol=NA, 
+                                     EOCRC_total_case= NA,
+                                     LOCRC_total_case= NA,
+                                     EOCRC_mutated_case = NA, 
+                                     LOCRC_mutated_case = NA,
+                                     EOCRC_freq =NA, LOCRC_freq =NA, pval =NA,
+                                     or =NA, ci.up =NA, ci.low =NA,
+                                     formula = NA, TMB_Status =NA, Country = NA)
+    
+  } 
+  
+  if (length(intersect(clin.EOCRC_nonhyper@clinical.data$Tumor_Sample_Barcode, country_tsb)) > 0 &
+      length(intersect(clin.LOCRC_nonhyper@clinical.data$Tumor_Sample_Barcode, country_tsb)) > 0) {
+   
+    rt_country_EO_nonhyper <- subsetMaf(clin.EOCRC_nonhyper,tsb=country_tsb)
+    rt_country_LO_nonhyper <- subsetMaf(clin.LOCRC_nonhyper,tsb=country_tsb)
+    Clinical_data_nonhyper <- Clinical_data_nonhyper[Country == guojia]
+    
+    
+    
+    bubble_genes_nonhyper <- uniquegenes(m1 = rt_country_EO_nonhyper, m2 = rt_country_LO_nonhyper,
+                                      minMut = Minmut)
+    
+    if(length(bubble_genes_nonhyper) == 0 ){
+      return(NULL)
+    }
+    
+  
+    
+    for (i in bubble_genes_nonhyper) {
+      result <- tryCatch({
+        logstic_country_mafcompare(m1 = rt_country_EO_nonhyper, m2 = rt_country_LO_nonhyper,
+                                   Clinical.data = Clinical_data_nonhyper, 
+                                   Gene_test =i,Guojia = guojia,TMB_status = 'nonhyper')
+        NULL 
+      }, warning = function(w) {
+        problematic_genes <<- 
+          rbind(problematic_genes,
+                data.frame(problematic_gene = i,
+                           country =guojia,
+                           TMB_Staus = 'nonhyper'))
+        return(NULL) 
+      })
+    }
+    
+    country_comp_nonhyper <- result_df[-1] 
+    
+    
+    
+  } else {
+    country_comp_nonhyper <- data.frame(Hugo_Symbol=NA,
+                                        EOCRC_total_case= NA,
+                                        LOCRC_total_case= NA,
+                                        EOCRC_mutated_case = NA, 
+                                        LOCRC_mutated_case = NA,
+                                        EOCRC_freq =NA, LOCRC_freq =NA, pval =NA,
+                                        or =NA, ci.up =NA, ci.low =NA,
+                                        formula = NA, TMB_Status =NA, Country = NA)
+  }
+  
+  
+  bubble_table = rbind(bubble_table,country_comp_nonhyper,
+                           country_comp_hyper,country_comp) 
+  
+  
+  return(bubble_table)
+  
+}
+
+
+
+formula_base <- "Gene_status ~ Age_class"
+
+singlesex_panel_record_log <- data.frame(Gene_test = character(),
+                          Country = character(),
+                          TMB_status = character(),
+                          stringsAsFactors = FALSE)
+
+
+problematic_genes <- data.frame(
+  problematic_gene = NA,
+  country =NA,
+  TMB_Staus = NA
+)
+
+
+result_df <- data.table::data.table(
+  Hugo_Symbol = NA,
+  EOCRC_total_case= NA,
+  LOCRC_total_case= NA,
+  EOCRC_mutated_case = NA, 
+  LOCRC_mutated_case = NA,
+  EOCRC_freq = NA,
+  LOCRC_freq = NA,
+  pval = NA, 
+  or = NA,
+  ci.up =  NA,
+  ci.low =  NA,
+  formula =NA,
+  TMB_Status = NA,
+  Country = NA
+)
+
+
+bubble_table = data.frame(Hugo_Symbol=NA,
+                          EOCRC_total_case= NA,
+                          LOCRC_total_case= NA,
+                          EOCRC_mutated_case = NA, 
+                          LOCRC_mutated_case = NA,
+                          EOCRC_freq =NA, LOCRC_freq =NA, pval =NA,
+                          or =NA, ci.up =NA, ci.low =NA,
+                          formula = NA, TMB_Status =NA, Country = NA)
+
+total_bubble_table <-  data.frame(Hugo_Symbol=NA, 
+                                  EOCRC_total_case= NA,
+                                  LOCRC_total_case= NA,
+                                  EOCRC_mutated_case = NA, 
+                                  LOCRC_mutated_case = NA,
+                                  EOCRC_freq =NA, LOCRC_freq =NA, pval =NA,
+                                  or =NA, ci.up =NA, ci.low =NA,
+                                  formula = NA, TMB_Status =NA, Country = NA)
+
+
+  unique(rt@clinical.data$Country)
+
+  France_bubble_table <- generate_bubble_table('France',Minmut = 2)
+  Netherlands_bubble_table  <- generate_bubble_table('Netherlands',Minmut = 2)
+  Canada_bubble_table  <- generate_bubble_table('Canada',Minmut = 2)
+  Spain_bubble_table  <- generate_bubble_table('Spain',Minmut = 2)
+  Nigeria_bubble_table  <- generate_bubble_table('Nigeria',Minmut = 2)
+  China_bubble_table  <- generate_bubble_table('China',Minmut = 2)
+  US_bubble_table  <- generate_bubble_table('US',Minmut = 2)
+  
+  
+  
+  total_bubble_table <- US_bubble_table[-1,]
+  
+  names(total_bubble_table)
+  names(total_bubble_table)[names(total_bubble_table) =='Hugo_Symbol'] = 'Gene'
+  names(total_bubble_table)[names(total_bubble_table) =='or'] = 'OR'
+
+
+filter_gene_country <- total_bubble_table %>%
+  filter(TMB_Status == "Overall" & EOCRC_freq < 0.05)  %>%
+  select(Gene, Country,EOCRC_freq)
+
+
+
+total_bubble_table_filter <- total_bubble_table %>%
+  anti_join(filter_gene_country, by = c("Gene", "Country"))%>% 
+  mutate(adjPval = p.adjust(p = pval, method = "fdr")) 
+  
+total_bubble_table_filter$p_sig <- as.character(symnum(total_bubble_table_filter$adjPval, 
+                                              cutpoints = c(0, 0.01, 0.05, 0.25, 1), 
+                                              symbols = c("***", "**", "*", "")))
+
+
+
+{
+
+  gene_country_counts <- total_bubble_table_filter %>%
+    group_by(Gene) %>%
+    summarise(Country_count = n_distinct(Country))
+  
+  genes_in_6_countries <- gene_country_counts %>%
+    filter(Country_count >= 6) %>%
+    select(Gene)
+  }
+
+bubble_table = total_bubble_table_filter %>%
+  filter(Gene %in%  genes_in_6_countries$Gene)
+
+
+
+
+p1 <- ggplot(data = bubble_table, 
+             aes(x = Gene, y = TMB_Status)) +
+  geom_point(aes(color = factor(case_when(
+    OR > 1 ~ 'OR > 1',
+    OR < 1 ~ 'OR < 1',
+    OR == 1 ~ 'No significance'
+  ), levels = c('OR > 1', 'OR < 1', 'No significance'))), 
+  size = 6, alpha = 0.7, show.legend = c(size = FALSE))  +
+  
+ 
+  geom_text(aes(label = p_sig), vjust = 0.8, hjust = 0.5, size = 3, color = "black"
+           
+            ) +
+  facet_grid(Country ~ ., scales = "free_y", space = "free") +  
+  scale_y_discrete(position = "left") +  
+  scale_color_manual(values = c('OR > 1' = '#d53e4f', 'OR < 1' = '#4393c3', 'No significance' = 'gray')) +
+  theme_few() +
+  labs(y ='TMB Category') +
+  theme(
+    strip.background = element_blank(), 
+    strip.text.y.right = element_text(size = 13, angle = 0),
+    panel.spacing = unit(0, "lines"),   
+    panel.border = element_rect(fill = NA, color = "black", linewidth = 0.5),
+    axis.text.y = element_text(color = "black", size = 10, angle = 0),
+    axis.text.x = element_text(color = "black", size = 10, angle = 45, vjust = 0.5, hjust = 0.5),
+    legend.text = element_text(color = "black", size = 10),
+    legend.title = element_blank()
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 4)))
+
+p1
+
+ggsave(paste(dir,'/8_intersect_gene_among_countries.pdf',sep = ''),
+       width = 15,height = 6.5,dpi = 300)
+
+write.csv(total_bubble_table,file = '8_total_bubble_data.csv',
+          quote = FALSE, row.names = FALSE)
+
