@@ -5,15 +5,19 @@
   clin.LOCRC_hyper <- subsetMaf(maf=rt, tsb=TMB_LOCRC_hyper_sample, isTCGA=FALSE)
   
   Clinical_data_hyper <- rt@clinical.data[Tumor_Sample_Barcode %in% c(TMB_EOCRC_hyper_sample,TMB_LOCRC_hyper_sample)]
- 
   
-   save(clin.EOCRC_hyper,clin.LOCRC_hyper,Clinical_data_hyper,
-         file = 'hyper_data.Rdata')
+  # fvsm <- mafCompare(m1=clin.EOCRC_hyper, m2=clin.LOCRC_hyper, 
+  #                    m1Name="EOCRC", m2Name="LOCRC", minMut=5)
+  
+  
+ save(clin.EOCRC_hyper,clin.LOCRC_hyper,Clinical_data_hyper,
+      file = 'hyper_data.Rdata')
   
   
   
   hyper_genes <- uniquegenes(clin.EOCRC_hyper,clin.LOCRC_hyper,minMut = 10)
   
+  #提取出hyper队列的基因，用对应的TSB匹配对应的临床特征信息，并统计临床特征信息
   Hugo_clinical_info_hyper <- panel_hugo_symbol[Hugo_Symbol %in% hyper_genes] %>%
     merge(Clinical_data_hyper[, c('Tumor_Sample_Barcode', 'Age_class','Country',"Sex","Race")], 
           by = "Tumor_Sample_Barcode") %>%
@@ -25,9 +29,11 @@
       Sex_count = n_distinct(Sex)
     ) %>% ungroup()
   
-  
+  #length(Hugo_clinical_info_xxxx)
+  # [1] 4314
   Hugo_clinical_info_xxxx <- Hugo_clinical_info_hyper %>% 
-   
+    # 函数中已经有对逻辑回归公式进行调整，不需要此处再做筛选
+    # filter(Panel_count>1,Country_count>1,Race_count>1,Sex_count>1) %>% 
     pull(Hugo_Symbol)
  
   result_df <- data.table::data.table(
@@ -38,6 +44,10 @@
     LOCRC = NA, 
     EOCRC_freq = NA,
     LOCRC_freq = NA,
+    EOCRC_freq_normalized = NA,
+    LOCRC_freq_normalized = NA,
+    EOCRC_panel_TMB= NA,
+    LOCRC_panel_TMB= NA,
     pval = NA, 
     or = NA,
     ci.up =  NA,
@@ -45,8 +55,10 @@
     formula =NA
   )
   
-  formula_base <- "Gene_status ~ Age_class"
- 
+  formula_base <- "Gene_status ~ Age_class+ TMB"
+  
+  #problematic_genes_hyper
+  # [1] "CDKN2C"   "CHD5"     "CRLF2"    "CYSLTR2"  "DNAJB1"   "EIF1AX"   "EIF4E"    "H3F3A"    "HIST1H1C"
   problematic_genes_hyper <- c() 
   
   singlesex_panel_record_log <- data.frame(Gene_test = character(),
@@ -56,14 +68,16 @@
     result <- tryCatch({
       logstic_mafcompare(m1=clin.EOCRC_hyper, m2= clin.LOCRC_hyper, 
                          Clinical.data=Clinical_data_hyper, Gene_test = i)
-      NULL  
+      NULL  # 如果没有错误，返回NULL
     }, warning = function(w) {
-      problematic_genes_hyper <<- c(problematic_genes_hyper, i)
-      return(NULL) 
+      problematic_genes_hyper <<- c(problematic_genes_hyper, i)  # 记录产生警告的基因
+      return(NULL)  # 返回NULL以继续循环
     })
   }
-
   
+  
+  # nrow(result_df)
+  # [1] 4306
   result_df_hyper <- result_df
   
   result_logistic_hyper <- result_df_hyper[-1,] %>% 
@@ -81,6 +95,21 @@
               quote=FALSE, row.names=FALSE, sep="\t")
   
   
+  
+  # # 
+  # # write.table(fvsm$results, file=paste(dir,'/hyper_EOCRC_vs_LOCRC_counts.tsv',sep = ""),
+  # #             quote=FALSE, row.names=FALSE, sep="\t")
+  # # 
+  # fvsm$SampleSummary$SampleSize[1]
+  # op = fvsm$results
+  # op$EOCRC_freq = round(op$EOCRC/fvsm$SampleSummary$SampleSize[1], 4)
+  # op$LOCRC_freq = round(op$LOCRC/fvsm$SampleSummary$SampleSize[2], 4)
+  # genes = op$Hugo_Symbol[op$pval < 0.05] # adj
+  # genes
+  # 
+  # write.table(op, file='./hyper_EOCRC_vs_LOCRC_freq.tsv', 
+  #             quote=FALSE, row.names=FALSE, sep="\t")
+  
 }
 
 
@@ -91,18 +120,20 @@
     df_hyper <- df_hyper %>% 
       filter(!is.infinite(or) & !is.infinite(ci.low) & !is.infinite(ci.up))
     
+    #add pvalue and adjustPvalue if need
+    #p_value_threshold <- 0.05
     adjustPval_threshold <- 0.05
     
     
     filtered_df_hyper <- df_hyper %>% 
-      filter(
+      filter(#pval <= p_value_threshold,
              adjPval <= adjustPval_threshold
              ) %>%
       filter(
         LOCRC_freq > EOCRC_freq
       ) %>%
       mutate(
-        Freq_added = (LOCRC_freq+EOCRC_freq )
+        Freq_average = (LOCRC_freq+EOCRC_freq )/2
       ) %>%
       arrange(desc(Freq_added))
     
@@ -133,6 +164,9 @@
       scale_x_continuous(breaks = c(0.1,0.5,1.0),
                          labels = scales::number_format(accuracy = 0.1)) +
       coord_cartesian(ylim = c(1,3), xlim = c(0.1,1.0)) +
+      # scale_x_continuous(trans = 'log10',breaks = c(1.0,1.5,2.0,2.5),
+      #                    labels = scales::number_format(accuracy = 0.1)) +
+      # coord_cartesian(ylim = c(1,21), xlim = c(1.0,2.5)) +
       geom_vline(xintercept = 1, linetype = "dashed") +  
       theme(axis.line.y = element_blank(), axis.ticks.y = element_blank(),
             axis.text.y = element_blank(), axis.title.y = element_blank(),
@@ -172,14 +206,14 @@ p_hyper_low =p_left + p_mid + p_right + plot_layout(design = layout)
  
   
   filtered_df_hyper <- df_hyper %>% 
-    filter(
+    filter(#pval <= p_value_threshold,
       adjPval <= adjustPval_threshold
     ) %>%
     filter(
       LOCRC_freq < EOCRC_freq
     ) %>%
     mutate(
-      Freq_added = (LOCRC_freq+EOCRC_freq )
+      Freq_average = (LOCRC_freq+EOCRC_freq )/2
     ) %>%
     arrange(desc(Freq_added))
   
@@ -210,7 +244,9 @@ p_hyper_low =p_left + p_mid + p_right + plot_layout(design = layout)
     scale_x_continuous(trans = 'log10',breaks = c(1,2,4,8,16),
                        labels = scales::number_format(accuracy = 0.1)) +
     coord_cartesian(ylim = c(1,21), xlim = c(1.0,16)) +
-  
+    # scale_x_continuous(trans = 'log10',breaks = c(1.0,1.5,2.0,2.5),
+    #                    labels = scales::number_format(accuracy = 0.1)) +
+    # coord_cartesian(ylim = c(1,21), xlim = c(1.0,2.5)) +
     geom_vline(xintercept = 1, linetype = "dashed") +  
     theme(axis.line.y = element_blank(), axis.ticks.y = element_blank(),
           axis.text.y = element_blank(), axis.title.y = element_blank(),
@@ -245,3 +281,18 @@ p_hyper_low =p_left + p_mid + p_right + plot_layout(design = layout)
 p_hyper_high =p_left + p_mid + p_right + plot_layout(design = layout)
 
 
+
+
+
+
+# 
+# # pdf(paste(dir,'/4_hyper_forestPlot_EOlower_freqadded20.pdf',sep = ""), 
+# #     width = 11, height = 2)
+# 
+# pdf(paste(dir,'/4_hyper_forestPlot_EOhigher_freqadded20.pdf',sep = ""), 
+#     width = 11, height = 6)
+# 
+# print(p_left + p_mid + p_right + plot_layout(design = layout))
+# 
+# dev.off()
+# 
