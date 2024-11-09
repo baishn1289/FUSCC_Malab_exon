@@ -16,15 +16,24 @@ gene_mutation_counts <- mutation_data %>%
   summarise(Mutation_Count = n(), .groups = "drop") %>%
   spread(key = Hugo_Symbol, value = Mutation_Count, fill = 0) %>% as.data.frame
 
+# genelist <- genelist[genelist %in% colnames(gene_mutation_counts)]
+# gene_mutation_counts <- gene_mutation_counts[, c('Tumor_Sample_Barcode', genelist)]
+
 rownames(gene_mutation_counts) <- gene_mutation_counts$Tumor_Sample_Barcode
 gene_mutation_counts <- gene_mutation_counts[,-1]
 
 gene_mutation_counts <- gene_mutation_counts[, colnames(gene_mutation_counts) %in% genelist]
 
-panel_gene_map <- panel %>% 
-  group_by(SEQ_ASSAY_ID) %>% 
-  summarize(Genes = list(Hugo_Symbol), .groups = "drop") %>%
-  deframe()
+final <- maf.mutload %>%
+  left_join(gene_mutation_counts, by = "Tumor_Sample_Barcode")
+
+colnames(final)[1:20]
+final <- final[!is.na(final$TMB),]
+
+gene_panel_map <- panel %>% 
+  group_by(Hugo_Symbol) %>% 
+  summarize(Genes = list(SEQ_ASSAY_ID), .groups = "drop") %>%
+  deframe()  # 将数据框转换为列表，便于查找
 
 results <- data.frame(Gene = character(), 
                       Overall_pval = numeric(), EOCRC_rate = numeric(), LOCRC_rate = numeric(),
@@ -36,27 +45,18 @@ dim(gene_mutation_counts)
 
 for(i in colnames(gene_mutation_counts)) { #  gene
   print(i)
-  for(j in rownames(gene_mutation_counts)) { # patient id
-    refpanel <- maf.mutload$Panel[match(j, maf.mutload$Tumor_Sample_Barcode)]
-    if(! i %in% panel_gene_map[[refpanel]])
-      gene_mutation_counts[j, i] = NA
-  }
+  final_data <- final %>% filter(Panel %in% gene_panel_map[[i]])
   
-  final_data <- data.frame(x1 = rownames(gene_mutation_counts), 
-                   x2 = gene_mutation_counts[,i])
+  final_data[,i] <- final_data[,i]/final_data$TMB
   
-  colnames(final_data) <- c('Tumor_Sample_Barcode', i)
-  
-  final_data <- maf.mutload %>% left_join(final_data, by = "Tumor_Sample_Barcode")
-  
-  x1 <- c(na.omit(final_data[final_data$Age_class == 'EOCRC', i]))
-  x2 <- c(na.omit(final_data[final_data$Age_class == 'LOCRC', i]))
+  x1 <- final_data[final_data$Age_class == 'EOCRC', i]
+  x2 <- final_data[final_data$Age_class == 'LOCRC', i]
   
   if(length(x1) >= 10 & length(x2) >= 10) {
     EOCRC_rate <- mean(x1)
     LOCRC_rate <- mean(x2)
     
-    # Overall p 值
+    # Overall
     overall_test <- wilcox.test(x1, x2)
     
     # Hypermutated
