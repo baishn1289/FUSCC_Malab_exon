@@ -19,11 +19,6 @@ gene_mutation_counts <- mutation_data %>%
 # genelist <- genelist[genelist %in% colnames(gene_mutation_counts)]
 # gene_mutation_counts <- gene_mutation_counts[, c('Tumor_Sample_Barcode', genelist)]
 
-rownames(gene_mutation_counts) <- gene_mutation_counts$Tumor_Sample_Barcode
-gene_mutation_counts <- gene_mutation_counts[,-1]
-
-gene_mutation_counts <- gene_mutation_counts[, colnames(gene_mutation_counts) %in% genelist]
-
 final <- maf.mutload %>%
   left_join(gene_mutation_counts, by = "Tumor_Sample_Barcode")
 
